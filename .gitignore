@@ -1,0 +1,18 @@
+# Nothing here is required to run the lab — every service uses only the Node
+# standard library — but keep the usual noise out if you add tooling later.
+node_modules/
+package-lock.json
+
+*.log
+npm-debug.log*
+
+.env
+.env.local
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+tmp/
+*.tmp

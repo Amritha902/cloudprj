@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Network Lab</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2230; --line: #2a3140;
+    --text: #e6edf3; --muted: #8b949e;
+    --ok: #3fb950; --bad: #f85149; --warn: #d29922; --accent: #58a6ff;
+    --edge: #58a6ff; --app: #a371f7; --data: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header {
+    padding: 22px 24px; border-bottom: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between;
+  }
+  h1 { margin: 0; font-size: 19px; letter-spacing: .2px; }
+  h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+  .sub { color: var(--muted); font-size: 13px; }
+  main { padding: 24px; display: grid; gap: 20px; max-width: 1180px; margin: 0 auto; }
+  .grid-2 { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  tbody tr:last-child td { border-bottom: none; }
+  /* the hops column is long prose, so let this one table wrap instead of clipping */
+  #e2e td { white-space: normal; }
+  #e2e td:nth-child(2) { min-width: 180px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: baseline; }
+  .up { background: var(--ok); box-shadow: 0 0 7px var(--ok); }
+  .down { background: var(--bad); box-shadow: 0 0 7px var(--bad); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.open { background: rgba(63,185,80,.14); color: var(--ok); border: 1px solid rgba(63,185,80,.35); }
+  .pill.blocked { background: rgba(248,81,73,.13); color: var(--bad); border: 1px solid rgba(248,81,73,.32); }
+  .pill.self { background: rgba(139,148,158,.12); color: var(--muted); border: 1px solid var(--line); }
+  .mismatch { outline: 2px solid var(--warn); outline-offset: -2px; }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 8px 15px; cursor: pointer; font-size: 13px; font-weight: 500;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 12px; line-height: 1.6; }
+  .verdict { font-size: 13px; font-weight: 600; padding: 9px 13px; border-radius: 7px; margin-top: 14px; }
+  .verdict.good { background: rgba(63,185,80,.1); color: var(--ok); border: 1px solid rgba(63,185,80,.3); }
+  .verdict.bad { background: rgba(248,81,73,.1); color: var(--bad); border: 1px solid rgba(248,81,73,.3); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+  .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .bar { height: 6px; border-radius: 3px; background: var(--accent); min-width: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Cloud Network Lab</h1>
+    <div class="sub">Three-tier private network topology on Docker — live from the gateway</div>
+  </div>
+  <div class="sub mono" id="clock">—</div>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>Topology</h2>
+    <svg id="topo" viewBox="0 0 900 340" width="100%" role="img" aria-label="Network topology diagram">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/>
+        </marker>
+      </defs>
+
+      <!-- network lanes -->
+      <rect x="20" y="52"  width="860" height="72" rx="8" fill="rgba(88,166,255,.06)" stroke="#58a6ff" stroke-opacity=".35"/>
+      <rect x="20" y="152" width="860" height="72" rx="8" fill="rgba(163,113,247,.06)" stroke="#a371f7" stroke-opacity=".35"/>
+      <rect x="20" y="252" width="860" height="72" rx="8" fill="rgba(63,185,80,.06)" stroke="#3fb950" stroke-opacity=".35"/>
+
+      <text x="34" y="46"  fill="#58a6ff" font-size="12" font-family="monospace">edge · 172.28.0.0/24 · published to host</text>
+      <text x="34" y="146" fill="#a371f7" font-size="12" font-family="monospace">app · 172.28.1.0/24 · private</text>
+      <text x="34" y="246" fill="#3fb950" font-size="12" font-family="monospace">data · 172.28.2.0/24 · internal (no route out)</text>
+
+      <!-- host -->
+      <text x="450" y="22" fill="#8b949e" font-size="13" text-anchor="middle" font-family="monospace">host :8080</text>
+      <line x1="450" y1="28" x2="450" y2="52" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- gateway -->
+      <rect x="370" y="70" width="160" height="38" rx="7" fill="#1c2230" stroke="#58a6ff"/>
+      <circle id="dot-gateway" cx="388" cy="89" r="5" fill="#8b949e"/>
+      <text x="402" y="94" fill="#e6edf3" font-size="14" font-family="monospace">gateway</text>
+
+      <!-- gateway to apis -->
+      <line x1="430" y1="108" x2="250" y2="170" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="470" y1="108" x2="650" y2="170" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- apis -->
+      <rect x="170" y="170" width="160" height="38" rx="7" fill="#1c2230" stroke="#a371f7"/>
+      <circle id="dot-api-1" cx="188" cy="189" r="5" fill="#8b949e"/>
+      <text x="202" y="194" fill="#e6edf3" font-size="14" font-family="monospace">api-1</text>
+
+      <rect x="570" y="170" width="160" height="38" rx="7" fill="#1c2230" stroke="#a371f7"/>
+      <circle id="dot-api-2" cx="588" cy="189" r="5" fill="#8b949e"/>
+      <text x="602" y="194" fill="#e6edf3" font-size="14" font-family="monospace">api-2</text>
+
+      <!-- apis to vault -->
+      <line x1="250" y1="208" x2="420" y2="270" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="650" y1="208" x2="480" y2="270" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- blocked edge: gateway to vault -->
+      <path d="M 530 89 C 830 89 830 289 530 289" fill="none" stroke="#f85149" stroke-width="1.5"
+            stroke-dasharray="6 5" stroke-opacity=".75"/>
+      <text x="836" y="185" fill="#f85149" font-size="12" text-anchor="middle" font-family="monospace">✕</text>
+      <text x="836" y="203" fill="#f85149" font-size="10" text-anchor="middle" font-family="monospace">blocked</text>
+
+      <!-- vault -->
+      <rect x="370" y="270" width="160" height="38" rx="7" fill="#1c2230" stroke="#3fb950"/>
+      <circle id="dot-vault" cx="388" cy="289" r="5" fill="#8b949e"/>
+      <text x="402" y="294" fill="#e6edf3" font-size="14" font-family="monospace">vault</text>
+    </svg>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:#58a6ff"></span>edge — the only tier bound to a host port</span>
+      <span><span class="swatch" style="background:#a371f7"></span>app — bridges edge and data</span>
+      <span><span class="swatch" style="background:#3fb950"></span>data — internal, unreachable from the edge</span>
+    </div>
+  </section>
+
+  <div class="grid-2">
+
+    <section class="card">
+      <h2>Load balancer</h2>
+      <div class="row">
+        <button id="send10">Send 10 requests</button>
+        <span class="sub" id="lb-note">round-robin over healthy instances only</span>
+      </div>
+      <table>
+        <thead><tr><th>Backend</th><th>Health</th><th>Requests</th><th>Share</th><th>Check</th></tr></thead>
+        <tbody id="backends"><tr><td colspan="5" class="sub">loading…</td></tr></tbody>
+      </table>
+      <div class="note" id="lb-detail"></div>
+    </section>
+
+    <section class="card">
+      <h2>End-to-end request</h2>
+      <div class="row">
+        <button id="fetch-records">GET /api/records</button>
+        <span class="sub">host → gateway → api → vault</span>
+      </div>
+      <table>
+        <thead><tr><th>Served by</th><th>Hops</th><th>Records</th></tr></thead>
+        <tbody id="e2e"><tr><td colspan="3" class="sub">not run yet</td></tr></tbody>
+      </table>
+      <div class="note" id="e2e-detail"></div>
+    </section>
+
+  </div>
+
+  <section class="card">
+    <h2>Live reachability matrix</h2>
+    <div class="row">
+      <button id="run-matrix">Re-run probes</button>
+      <span class="sub">each cell is a real TCP connect, run from the source container</span>
+    </div>
+    <table>
+      <thead><tr><th>from \ to</th><th>gateway</th><th>api-1</th><th>api-2</th><th>vault</th></tr></thead>
+      <tbody id="matrix"><tr><td colspan="5" class="sub">probing…</td></tr></tbody>
+    </table>
+    <div id="matrix-verdict"></div>
+    <div class="note">
+      Cells are compared against what the topology declares: two services can reach each other only if
+      they share a network. A cell outlined in amber is a measurement that disagrees with the declaration.
+      <strong>gateway → vault</strong> fails at DNS resolution — Docker's embedded DNS will not resolve a
+      service name for a container that shares no network with it.
+    </div>
+  </section>
+
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const getJSON = (path) => fetch(path, { cache: "no-store" }).then((r) => r.json());
+
+function setDot(service, healthy) {
+  const dot = $("dot-" + service);
+  if (dot) dot.setAttribute("fill", healthy ? "#3fb950" : "#f85149");
+}
+
+// ------------------------------------------------------------- backends
+
+async function refreshBackends() {
+  try {
+    const data = await getJSON("/lab/backends");
+    const total = data.backends.reduce((sum, b) => sum + b.requests, 0);
+
+    $("backends").innerHTML = data.backends.map((b) => {
+      const share = total ? Math.round((b.requests / total) * 100) : 0;
+      setDot(b.name, b.healthy);
+      return `<tr>
+        <td class="mono">${b.name}<span class="sub"> · ${b.address}</span></td>
+        <td><span class="dot ${b.healthy ? "up" : "down"}"></span>${b.healthy ? "healthy" : "down"}</td>
+        <td class="mono">${b.requests}</td>
+        <td><div class="bar" style="width:${Math.max(share, 2)}%"></div><span class="sub">${share}%</span></td>
+        <td class="sub mono">${b.lastLatencyMs ?? "—"}ms</td>
+      </tr>`;
+    }).join("");
+
+    $("lb-detail").textContent =
+      `${total} request${total === 1 ? "" : "s"} proxied so far` +
+      (data.rejectedNoBackend ? ` · ${data.rejectedNoBackend} rejected with no healthy backend` : "") +
+      ` · try "docker compose stop api-2" and watch traffic shift.`;
+
+    setDot("gateway", true);
+  } catch {
+    setDot("gateway", false);
+    $("lb-detail").textContent = "gateway unreachable";
+  }
+}
+
+// ------------------------------------------------------------ load test
+
+$("send10").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  const counts = {};
+  for (let i = 0; i < 10; i++) {
+    try {
+      const res = await fetch("/api/whoami", { cache: "no-store" });
+      const who = res.headers.get("x-served-by") || "unknown";
+      counts[who] = (counts[who] || 0) + 1;
+    } catch {
+      counts.error = (counts.error || 0) + 1;
+    }
+  }
+  $("lb-note").textContent = "last burst: " +
+    Object.entries(counts).map(([k, v]) => `${k}×${v}`).join(", ");
+  await refreshBackends();
+  button.disabled = false;
+});
+
+// ----------------------------------------------------------- end to end
+
+$("fetch-records").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const started = performance.now();
+    const res = await fetch("/api/records", { cache: "no-store" });
+    const servedBy = res.headers.get("x-served-by") || "?";
+    const body = await res.json();
+    const ms = Math.round(performance.now() - started);
+
+    $("e2e").innerHTML = `<tr>
+      <td class="mono">${servedBy}</td>
+      <td class="sub mono">${(body.hops || []).join(" → ")}</td>
+      <td class="mono">${body.count ?? 0}</td>
+    </tr>`;
+    $("e2e-detail").textContent = body.records && body.records.length
+      ? `${ms}ms · first record ${body.records[0].id} (${body.records[0].region}) read from the isolated data tier`
+      : `no records returned: ${JSON.stringify(body)}`;
+    await refreshBackends();
+  } catch (err) {
+    $("e2e-detail").textContent = "request failed: " + err.message;
+  }
+  button.disabled = false;
+});
+
+// --------------------------------------------------------------- matrix
+
+function cell(source, target, entry, expected) {
+  if (source === target) return `<td><span class="pill self">self</span></td>`;
+  const agrees = entry.ok === expected;
+  const label = entry.ok ? "open" : "blocked";
+  const title = entry.ok ? `connected in ${entry.ms}ms` : (entry.error || "unreachable");
+  return `<td class="${agrees ? "" : "mismatch"}">
+    <span class="pill ${entry.ok ? "open" : "blocked"}" title="${title}">${label}</span>
+    <div class="sub mono" style="font-size:11px">${title}</div>
+  </td>`;
+}
+
+async function refreshMatrix() {
+  const button = $("run-matrix");
+  button.disabled = true;
+  $("matrix").innerHTML = `<tr><td colspan="5" class="sub">probing…</td></tr>`;
+
+  try {
+    const m = await getJSON("/lab/matrix");
+    $("matrix").innerHTML = m.sources.map((source) => `<tr>
+      <td class="mono">${source}</td>
+      ${m.targets.map((t) => cell(source, t, m.actual[source][t], m.expected[source][t])).join("")}
+    </tr>`).join("");
+
+    const verdict = $("matrix-verdict");
+    if (m.mismatches.length === 0) {
+      verdict.className = "verdict good";
+      verdict.textContent = "✓ Every measured edge matches the declared topology.";
+    } else {
+      verdict.className = "verdict bad";
+      verdict.textContent = "✕ " + m.mismatches
+        .map((x) => `${x.from} → ${x.to}: expected ${x.expected}, measured ${x.actual}`)
+        .join(" · ");
+    }
+    setDot("vault", m.actual["api-1"].vault.ok || m.actual["api-2"].vault.ok);
+  } catch (err) {
+    $("matrix").innerHTML = `<tr><td colspan="5" class="sub">probe failed: ${err.message}</td></tr>`;
+  }
+  button.disabled = false;
+}
+
+$("run-matrix").addEventListener("click", refreshMatrix);
+
+// ----------------------------------------------------------------- boot
+
+setInterval(() => {
+  $("clock").textContent = new Date().toLocaleTimeString();
+  refreshBackends();
+}, 2000);
+
+$("clock").textContent = new Date().toLocaleTimeString();
+refreshBackends();
+refreshMatrix();
+</script>
+
+</body>
+</html>

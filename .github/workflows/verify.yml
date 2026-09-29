@@ -1,0 +1,44 @@
+name: Verify
+
+# GitHub Actions is free for public repositories, so CI here is a free cloud
+# resource: it stands the whole topology up on a runner and verifies it on
+# every push.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Build the topology and verify it
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show runner Docker version
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Build and start the lab
+        run: docker compose up -d --build --wait
+
+      - name: Show container and network state
+        run: ./scripts/lab.sh status
+
+      - name: Run the verification suite
+        run: node tests/netlab-test.js
+
+      - name: Print the reachability matrix
+        run: ./scripts/lab.sh matrix
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

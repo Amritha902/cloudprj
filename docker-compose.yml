@@ -1,0 +1,124 @@
+# Cloud Network Lab — a three-tier private network topology.
+#
+#   host :8080
+#      |
+#   [ edge ]  gateway ......... only tier with a published port
+#      |
+#   [ app  ]  api-1  api-2 .... reachable from the gateway, never from the host
+#      |
+#   [ data ]  vault ........... internal network: no host port, no route out
+#
+# The gateway is not attached to `data`, so it cannot reach the vault at all —
+# Docker's embedded DNS will not even resolve the name for it.
+
+name: cloud-network-lab
+
+x-service-base: &service-base
+  build:
+    context: .
+    args:
+      BASE_IMAGE: ${NETLAB_BASE_IMAGE:-node:22-alpine}
+  restart: unless-stopped
+  init: true
+
+services:
+  gateway:
+    <<: *service-base
+    container_name: netlab-gateway
+    command: node services/gateway/server.js
+    environment:
+      PORT: 8080
+      BACKENDS: api-1:4000,api-2:4000
+    ports:
+      # The single ingress point. Bound to loopback so the lab is not exposed
+      # on the machine's LAN; use 0.0.0.0:8080 deliberately if you want that.
+      - "127.0.0.1:8080:8080"
+    networks:
+      - edge
+      - app
+    depends_on:
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8080/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  api-1:
+    <<: *service-base
+    container_name: netlab-api-1
+    command: node services/api/server.js
+    environment:
+      PORT: 4000
+      SERVICE_NAME: api-1
+      VAULT_URL: http://vault:7000
+    networks:
+      - app
+      - data
+    depends_on:
+      vault:
+        condition: service_healthy
+    healthcheck: &api-healthcheck
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:4000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  api-2:
+    <<: *service-base
+    container_name: netlab-api-2
+    command: node services/api/server.js
+    environment:
+      PORT: 4000
+      SERVICE_NAME: api-2
+      VAULT_URL: http://vault:7000
+    networks:
+      - app
+      - data
+    depends_on:
+      vault:
+        condition: service_healthy
+    healthcheck: *api-healthcheck
+
+  vault:
+    <<: *service-base
+    container_name: netlab-vault
+    command: node services/vault/server.js
+    environment:
+      PORT: 7000
+    # No `ports:` key on purpose — nothing outside the data network can reach it.
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:7000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+networks:
+  edge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+  app:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
+
+  data:
+    driver: bridge
+    # No gateway to the outside world: containers here cannot route off the
+    # host, which is what makes this the data tier rather than just a subnet.
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.2.0/24

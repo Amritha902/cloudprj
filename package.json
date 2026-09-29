@@ -1,0 +1,18 @@
+{
+  "name": "cloud-network-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A three-tier cloud network topology on Docker: edge, private app and internal data tiers, with a live reachability matrix and a verification suite.",
+  "license": "MIT",
+  "scripts": {
+    "up": "./scripts/lab.sh up",
+    "down": "./scripts/lab.sh down",
+    "test": "node tests/netlab-test.js",
+    "matrix": "./scripts/lab.sh matrix",
+    "status": "./scripts/lab.sh status",
+    "logs": "./scripts/lab.sh logs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
